@@ -1,0 +1,54 @@
+steps:
+  # =====================================================
+  # Step 1: Build the Container Image
+  # =====================================================
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker build \
+          -t ${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_SERVICE_NAME}:$COMMIT_SHA \
+          -t ${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_SERVICE_NAME}:latest \
+          .
+
+  # =====================================================
+  # Step 2: Push Image to Artifact Registry
+  # =====================================================
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        docker push ${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_SERVICE_NAME}:$COMMIT_SHA
+        docker push ${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_SERVICE_NAME}:latest
+
+  # =====================================================
+  # Step 3: Deploy to Google Cloud Run
+  # =====================================================
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - '${_SERVICE_NAME}'  # <--- VARIABLE USED HERE
+      - '--image=${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_SERVICE_NAME}:$COMMIT_SHA'
+      - '--region=${_DEPLOY_REGION}'
+      - '--platform=managed'
+      - '--allow-unauthenticated' # Remove this line if you require IAM auth
+      - '--port=8080'
+      - '--min-instances=0'
+      - '--max-instances=5'
+
+# =====================================================
+# Substitutions (Variables)
+# These act as defaults but should be overridden in the Cloud Build Trigger
+# =====================================================
+substitutions:
+  _SERVICE_NAME: 'showrunner-core' # Default, override in Trigger
+  _DEPLOY_REGION: 'us-central1'
+  _AR_REGION: 'us-central1'
+  _AR_REPO: 'showrunner-repo'
+
+images:
+  - '${_AR_REGION}-docker.pkg.dev/$PROJECT_ID/${_AR_REPO}/${_SERVICE_NAME}:$COMMIT_SHA'
